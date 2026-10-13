@@ -1,0 +1,9 @@
+{
+  "name": "tainted-cain-calculator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "data": "node scripts/extract-data.mjs",
+    "test": "node scripts/test.mjs"
+  }
+}

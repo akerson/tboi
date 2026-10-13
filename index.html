@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tainted Cain Crafting Calculator</title>
+  <meta name="description" content="Bag of Crafting calculator for Tainted Cain in The Binding of Isaac: Repentance. Enter your seed and 8 pickups to see the exact item you'll craft. Works for Nintendo Switch.">
+  <meta name="theme-color" content="#16110e">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎒</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="masthead">
+      <h1>Tainted Cain Crafting Calculator</h1>
+      <p>Enter your run seed and 8 pickups to see the exact item the Bag of Crafting will make.</p>
+    </header>
+
+    <section class="card setup" aria-label="Run settings">
+      <label class="field-label" for="seed">Run seed</label>
+      <div class="seed-row">
+        <input id="seed" class="seed-input" type="text" inputmode="text" autocomplete="off" autocapitalize="characters"
+               spellcheck="false" maxlength="9" placeholder="XXXX XXXX" aria-describedby="seed-status">
+        <span id="seed-status" class="seed-status" aria-live="polite"></span>
+      </div>
+      <p class="hint">Shown on the pause screen. Letters O and I are read as 0 and 1.</p>
+
+      <span class="field-label" id="version-label">Game version</span>
+      <div class="segmented" role="radiogroup" aria-labelledby="version-label">
+        <button type="button" role="radio" data-version="rep">
+          <strong>Repentance</strong><small>Nintendo Switch</small>
+        </button>
+        <button type="button" role="radio" data-version="repplus">
+          <strong>Repentance+</strong><small>PC, Switch 2</small>
+        </button>
+      </div>
+      <p class="hint">Not sure? Craft 8 bombs: <b>Mr. Boom</b> means Repentance, <b>Mr. Mega</b> means Repentance+.</p>
+    </section>
+
+    <section class="card bag-card" aria-labelledby="bag-title">
+      <div class="card-head">
+        <h2 id="bag-title">Bag <span id="bag-count" class="muted">0/8</span></h2>
+        <span id="bag-score" class="chip" title="Bag value decides the item quality range"></span>
+        <button type="button" id="clear" class="btn-ghost">Clear</button>
+      </div>
+      <div id="bag" class="bag" aria-label="Pickups in the bag. Tap one to remove it."></div>
+
+      <div id="result" class="result" aria-live="polite"></div>
+
+      <div id="preview" class="preview" hidden>
+        <div class="preview-head">
+          <h3>What you could make</h3>
+          <span id="preview-count" class="muted small"></span>
+        </div>
+        <p id="preview-note" class="hint"></p>
+        <input id="preview-search" class="preview-search" type="search" placeholder="Search items" autocomplete="off"
+               aria-label="Search possible items">
+        <ol id="preview-list" class="preview-list"></ol>
+        <button type="button" id="preview-more" class="btn-ghost preview-more" hidden></button>
+      </div>
+    </section>
+
+    <section class="card picker-card" aria-labelledby="picker-title">
+      <div class="card-head">
+        <h2 id="picker-title">Add pickups</h2>
+        <span class="muted small">Tap to add &middot; badge = value</span>
+      </div>
+      <div id="picker"></div>
+    </section>
+
+    <details class="card modifiers" id="modifiers">
+      <summary>
+        <h2>Run modifiers</h2>
+        <span id="modifier-count" class="chip chip-warn" hidden></span>
+      </summary>
+      <p class="hint">These change which items the bag is allowed to give. Leave them all off for a normal run.</p>
+      <div id="modifier-list" class="modifier-list"></div>
+    </details>
+
+    <footer class="footer">
+      <p>
+        The crafting algorithm and item data were reverse engineered by
+        <a href="https://github.com/frto027/IsaacBagOfCraftingHuijiGadget">frto027</a> for the
+        <a href="https://isaac.huijiwiki.com/wiki/C710">Huiji Isaac wiki</a>. This is an English, mobile friendly port,
+        checked against their reference build. Assumes no mods.
+      </p>
+      <p>
+        Fan made and not affiliated with Nicalis or Edmund McMillen. Game sprites &copy; their owners.
+        Licensed <a href="https://creativecommons.org/licenses/by-nc-sa/3.0/">CC BY-NC-SA 3.0</a>.
+      </p>
+    </footer>
+  </main>
+
+  <button type="button" id="dock" class="dock" aria-label="Show bag and result" hidden>
+    <span id="dock-bag" class="dock-bag"></span>
+    <span id="dock-result" class="dock-result"></span>
+  </button>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
