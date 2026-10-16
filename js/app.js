@@ -1,6 +1,6 @@
-import data from './data.js';
-import { PICKUPS, craft, parseSeed, normalizeSeed, bagScore } from './crafting.js';
-import { recipeCost, TOTAL_BAGS } from './finder.js';
+import data from './data.js?v=2';
+import { PICKUPS, craft, parseSeed, normalizeSeed, bagScore } from './crafting.js?v=2';
+import { recipeCost, TOTAL_BAGS } from './finder.js?v=2';
 
 const PICKUP_GROUPS = [
   ['Hearts', [1, 2, 3, 4, 5, 6, 7]],
@@ -485,7 +485,7 @@ let finderShowAll = false;
 function startFinderSearch(key, seed) {
   if (finderJob?.key === key) return;
   finderWorker?.terminate();
-  const worker = new Worker(new URL('./finder-worker.js', import.meta.url), { type: 'module' });
+  const worker = new Worker(new URL('./finder-worker.js?v=2', import.meta.url), { type: 'module' });
   finderWorker = worker;
   finderJob = { key, progress: 0 };
   const finish = result => {
@@ -645,7 +645,19 @@ function renderFinder(seed) {
   }
   if (seed === null) {
     stopFinderSearch();
-    results.replaceChildren(finderNote('Enter a valid seed to search for recipes.'));
+    // Recipes depend on the seed, so point at the seed box; the search starts once it's valid.
+    const box = document.createElement('div');
+    box.className = 'finder-progress finder-needs-seed';
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'btn-ghost';
+    go.textContent = 'Enter seed';
+    go.addEventListener('click', () => {
+      seedInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      seedInput.focus({ preventScroll: true });
+    });
+    box.append(finderNote('Enter your run seed above and the search will start.'), go);
+    results.replaceChildren(box);
     return;
   }
 
