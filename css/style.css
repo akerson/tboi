@@ -299,6 +299,25 @@ h2 { font-size: 1.05rem; }
 }
 .preview-head h3 { margin: 0; flex: 1; font-size: 1rem; }
 .preview .hint { margin: 2px 0 10px; }
+.preview-tools {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.preview-tools .preview-search { flex: 1; min-width: 0; }
+.segmented-small {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  flex: none;
+}
+.segmented-small button {
+  padding: 4px 10px;
+  border-radius: 7px;
+  font-size: 0.85rem;
+}
 .preview-search {
   width: 100%;
   font: inherit;
@@ -352,6 +371,48 @@ h2 { font-size: 1.05rem; }
 }
 .preview-empty { color: var(--muted); font-size: 0.85rem; padding: 6px 2px; }
 .preview-more { width: 100%; margin-top: 8px; }
+
+/* ---------- item finder ---------- */
+
+.finder-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 6px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.finder-subhead {
+  margin: 14px 0 0;
+  font-size: 0.95rem;
+}
+.finder .hint { margin: 2px 0 8px; }
+.finder-progress { margin-top: 12px; }
+.finder-progress progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--accent);
+}
+.recipe-row { padding: 6px 10px; }
+.recipe-icons {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  min-width: 0;
+}
+.recipe-pickup {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.recipe-use {
+  flex: none;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
 
 /* ---------- picker ---------- */
 
@@ -521,4 +582,5 @@ body.has-dock .app { padding-bottom: 96px; }
   .bag-card { grid-column: 1; }
   .picker-card { grid-column: 2; grid-row: 2 / span 3; }
   .modifiers { grid-column: 1; }
+  .finder { grid-column: 1; }
 }

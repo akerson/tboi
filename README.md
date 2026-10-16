@@ -18,8 +18,10 @@ Quick way to check which one your game is: craft 8 bombs. **Mr. Boom** means Rep
 - Seed input with checksum validation (so typos are caught), and lenient typing (`jkd9z0c9` works).
 - Tap pickups to fill the bag. Like the real bag, an extra pickup pushes out the oldest one.
 - Shows the item, its in-game quote, quality, and a wiki link.
-- With 6 or 7 pickups in, previews every item the remaining slots could make, in alphabetical order, with the
-  easiest pickups to finish each one. Searchable, and tap one to fill the bag.
+- With 6 or 7 pickups in, previews every item the remaining slots could make, sorted alphabetically or by
+  quality, with the easiest pickups to finish each one. Searchable, and tap one to fill the bag.
+- Find recipes for an item: pick any craftable item and it checks all 30 million possible bags on your seed,
+  listing fixed recipes plus the easiest seeded ones (common pickups first). Tap one to fill the bag.
 - If the item needs an unlock you don't have yet, shows what the bag gives instead.
 - Run modifiers that change the result: Greed mode, daily runs, challenges, Womb and later, Sacred Orb,
   golden NO!, and co-op characters (Keeper, The Lost with Birthright, Tainted Lost).
@@ -35,8 +37,13 @@ reverse engineered by [frto027](https://github.com/frto027) for the
 [C++/WASM source](https://github.com/frto027/IsaacDecraftingHuijiGadget)).
 Like the game, it does its weight math in 32-bit floats, which matters for seeds near a boundary.
 
+`js/finder.js` does the reverse lookup. It groups bags by the item table they draw from (which only depends on
+the bag's quality range and its pool-adding pickups), skips tables that can't hold the target, and carries the
+rng along as it walks the bags in the game's own order, so a full search takes a few seconds in a Web Worker.
+
 `scripts/test.mjs` runs random seeds, bags and modifiers through both this port and frto027's compiled
-WASM build, for both game versions, and checks that they agree (600,000 of 600,000 cases at the time of writing).
+WASM build, for both game versions, and checks that they agree (600,000 of 600,000 cases at the time of writing). It also checks the finder
+against `craft()`, in both directions.
 
 ## Running locally
 

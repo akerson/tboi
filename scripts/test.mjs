@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import data from '../js/data.js';
 import { craft, parseSeed, normalizeSeed, PICKUPS, RNG_SHIFTS } from '../js/crafting.js';
+import { findRecipes } from '../js/finder.js';
 
 const CASES = Number(process.argv[2] ?? 20000);
 const read = path => readFileSync(new URL('../reference/' + path, import.meta.url), 'utf8');
@@ -72,4 +73,30 @@ for (const key of ['rep', 'repplus']) {
   console.log(`${key}: ${CASES - mismatches}/${CASES} match the reference`);
   assert.equal(mismatches, 0, `${key} mismatches`);
 }
+// --- recipe finder: craft a random bag, then the finder must list that bag, and only bags that work ---
+const FINDER_CASES = [
+  ['rep', {}], ['repplus', {}], ['rep', { sacredOrb: true, lateStage: true }], ['repplus', { greed: true, taintedLost: true }],
+];
+for (const [key, opts] of FINDER_CASES) {
+  const version = data.versions[key];
+  const seed = (rand() * 2 ** 32) >>> 0 || 1;
+  const bag = Array.from({ length: 8 }, () => 1 + Math.floor(rand() * 29)).sort((a, b) => a - b);
+  const target = craft(version, seed, bag, opts).candidates[0];
+  const { recipes, fixed, total } = findRecipes(version, seed, target, opts, { keep: Infinity });
+  assert.equal(recipes.length, total);
+  const listed = new Set([...recipes, ...fixed].map(r => r.join()));
+  assert.ok(listed.has(bag.join()), `${key} finder missed seed=${seed} bag=[${bag}]`);
+  // Random bags that make the target must be listed too.
+  for (let i = 0; i < 50000; i++) {
+    const other = Array.from({ length: 8 }, () => 1 + Math.floor(rand() * 29)).sort((a, b) => a - b);
+    if (craft(version, seed, other, opts).candidates[0] === target) {
+      assert.ok(listed.has(other.join()), `${key} finder missed seed=${seed} bag=[${other}]`);
+    }
+  }
+  for (let i = 0; i < recipes.length; i += Math.ceil(recipes.length / 2000)) {
+    assert.equal(craft(version, seed, recipes[i], opts).candidates[0], target, `${key} finder gave a wrong recipe [${recipes[i]}]`);
+  }
+  console.log(`${key} finder: ${total} recipes for item ${target} on seed ${seed}, all checked ones correct`);
+}
+
 console.log('all tests passed');

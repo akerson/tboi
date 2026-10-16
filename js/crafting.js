@@ -43,7 +43,7 @@ export const PICKUPS = [
   { name: 'Poop', value: 0 },
 ];
 
-const PICKUP_COUNT = 31; // ids 0..30; 0 is "empty"
+export const PICKUP_COUNT = 31; // ids 0..30; 0 is "empty"
 const COLLECTIBLE_COUNT = 733;
 
 // xorshift shift triples; the game picks a triple by index.
@@ -60,7 +60,7 @@ export const RNG_SHIFTS = [
   13, 5, 19, 13, 17, 15, 14, 1, 15, 14, 13, 15, 15, 1, 29, 17, 15, 20, 17, 15, 23, 17, 15, 26,
 ];
 
-function rngNext(seed, shiftIndex) {
+export function rngNext(seed, shiftIndex) {
   const a = RNG_SHIFTS[shiftIndex * 3], b = RNG_SHIFTS[shiftIndex * 3 + 1], c = RNG_SHIFTS[shiftIndex * 3 + 2];
   seed = (seed ^ (seed >>> a)) >>> 0;
   seed = (seed ^ (seed << b)) >>> 0;
@@ -111,7 +111,7 @@ export function bagScore(bag) {
   return bag.reduce((sum, id) => sum + PICKUPS[id].value, 0);
 }
 
-function qualityRange(score) {
+export function qualityRange(score) {
   if (score > 34) return [4, 4];
   if (score > 26) return [3, 4];
   if (score > 22) return [2, 4];
@@ -135,7 +135,7 @@ function qualityRange(score) {
  * @property {boolean} [goldenNo]     Holding a golden or stacked NO! trinket
  */
 
-function poolFilterOk(item, opts) {
+export function poolFilterOk(item, opts) {
   const tags = item[2];
   if (opts.challenge && tags.includes('nochallenge')) return false;
   if (opts.daily && tags.includes('nodaily')) return false;
@@ -143,7 +143,7 @@ function poolFilterOk(item, opts) {
   return true;
 }
 
-function rollFilterOk(item, id, seed, opts) {
+export function rollFilterOk(item, id, seed, opts) {
   const [, quality, tags] = item;
   if (!opts.greed && opts.lateStage && id === 697) return false;
   if (opts.keeper && tags.includes('nokeeper')) return false;
@@ -159,6 +159,59 @@ function rollFilterOk(item, id, seed, opts) {
   if (opts.goldenNo && quality === 0) return false;
   return true;
 }
+
+/**
+ * The weighted item table a bag draws from. Depends only on the bag's score and on the
+ * counts of the pickups that unlock extra pools, not on the seed.
+ * @param {number[]} counts  how many of each pickup id (0..30) are in the bag
+ */
+export function itemWeights(version, counts, score, opts = {}) {
+  // Each pickup type pulls in an item pool, weighted by how many of it are in the bag.
+  // [pool id, weight]; pool ids follow the game's ItemPoolType enum.
+  const poolWeights = [
+    [0, 1], // treasure
+    [1, 2], // shop
+    [2, 2], // boss
+    [4, counts[4] * 10], // angel: eternal hearts
+    [3, counts[3] * 10], // devil: black hearts
+    [5, counts[6] * 5], // secret: bone hearts
+    [8, counts[5] * 10], // golden chest: gold hearts
+    [12, counts[7] * 10], // curse: rotten hearts
+    [9, counts[25] * 10], // red chest: cracked keys
+    [7, counts[29] * 10], // shell game: poop
+  ];
+  // Planetarium: runes, but only with no pennies, keys, bombs or red hearts in the bag.
+  if (counts[1] + counts[8] + counts[12] + counts[15] === 0) poolWeights.push([26, counts[23] * 10]);
+
+  const weights = new Float32Array(COLLECTIBLE_COUNT);
+  let total = 0;
+  for (const [poolId, poolWeight] of poolWeights) {
+    if (poolWeight <= 0) continue;
+    // Angel, devil and secret pools are judged with a 5 point penalty.
+    const [qmin, qmax] = qualityRange(poolId === 3 || poolId === 4 || poolId === 5 ? score - 5 : score);
+    for (const [itemId, itemWeight] of version.pools[poolId]) {
+      const item = version.items[itemId];
+      if (item[1] < qmin || item[1] > qmax || !poolFilterOk(item, opts)) continue;
+      const w = f32(f32(itemWeight) * poolWeight);
+      total = f32(total + w);
+      weights[itemId] = f32(weights[itemId] + w);
+    }
+  }
+  return { weights, total };
+}
+
+/** One weighted draw from an itemWeights() table, given the advanced rng state. */
+export function drawItem(weights, total, rng) {
+  let remaining = drawPoint(total, rng);
+  for (let id = 0; id < COLLECTIBLE_COUNT; id++) {
+    if (weights[id] > remaining) return id;
+    remaining = f32(remaining - weights[id]);
+  }
+  return 25;
+}
+
+/** Where in [0, total) a draw lands. */
+export const drawPoint = (total, rng) => f32(f32(f32(2.3283062e-10) * f32(rng)) * total);
 
 /**
  * Simulates crafting.
@@ -185,54 +238,18 @@ export function craft(version, seed, bag, opts = {}) {
     if (!isLocked(fixed)) return { fixed: true, candidates };
   }
 
-  // Each pickup type pulls in an item pool, weighted by how many of it are in the bag.
-  // [pool id, weight]; pool ids follow the game's ItemPoolType enum.
-  const poolWeights = [
-    [0, 1], // treasure
-    [1, 2], // shop
-    [2, 2], // boss
-    [4, counts[4] * 10], // angel: eternal hearts
-    [3, counts[3] * 10], // devil: black hearts
-    [5, counts[6] * 5], // secret: bone hearts
-    [8, counts[5] * 10], // golden chest: gold hearts
-    [12, counts[7] * 10], // curse: rotten hearts
-    [9, counts[25] * 10], // red chest: cracked keys
-    [7, counts[29] * 10], // shell game: poop
-  ];
-  // Planetarium: runes, but only with no pennies, keys, bombs or red hearts in the bag.
-  if (counts[1] + counts[8] + counts[12] + counts[15] === 0) poolWeights.push([26, counts[23] * 10]);
-
   let rng = seed;
   for (let id = 0; id < PICKUP_COUNT; id++) {
     for (let j = 0; j < counts[id]; j++) rng = rngNext(rng, id);
   }
 
-  const score = bagScore(bag);
-  const weights = new Float32Array(COLLECTIBLE_COUNT);
-  let total = 0;
-  for (const [poolId, poolWeight] of poolWeights) {
-    if (poolWeight <= 0) continue;
-    // Angel, devil and secret pools are judged with a 5 point penalty.
-    const [qmin, qmax] = qualityRange(poolId === 3 || poolId === 4 || poolId === 5 ? score - 5 : score);
-    for (const [itemId, itemWeight] of version.pools[poolId]) {
-      const item = version.items[itemId];
-      if (item[1] < qmin || item[1] > qmax || !poolFilterOk(item, opts)) continue;
-      const w = f32(f32(itemWeight) * poolWeight);
-      total = f32(total + w);
-      weights[itemId] = f32(weights[itemId] + w);
-    }
-  }
+  const { weights, total } = itemWeights(version, counts, bagScore(bag), opts);
 
   // Draw until an item passes the run filters. The game gives up after 20 draws
   // and hands over whatever the 20th draw was.
   for (let attempt = 1; attempt <= 20; attempt++) {
     rng = rngNext(rng, 6);
-    let remaining = f32(f32(f32(2.3283062e-10) * f32(rng)) * total);
-    let selected = 25;
-    for (let id = 0; id < COLLECTIBLE_COUNT; id++) {
-      if (weights[id] > remaining) { selected = id; break; }
-      remaining = f32(remaining - weights[id]);
-    }
+    const selected = drawItem(weights, total, rng);
     const ok = rollFilterOk(version.items[selected], selected, seed, opts);
     if (ok || attempt === 20) {
       candidates.push(selected);

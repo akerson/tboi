@@ -1,5 +1,6 @@
 import data from './data.js';
 import { PICKUPS, craft, parseSeed, normalizeSeed, bagScore } from './crafting.js';
+import { recipeCost, TOTAL_BAGS } from './finder.js';
 
 const PICKUP_GROUPS = [
   ['Hearts', [1, 2, 3, 4, 5, 6, 7]],
@@ -30,6 +31,8 @@ const state = {
   version: 'rep',
   bag: [],
   opts: {},
+  previewSort: 'name',
+  findTarget: null,
   ...loadState(),
 };
 
@@ -42,6 +45,8 @@ function loadState() {
       version: saved.version in data.versions ? saved.version : 'rep',
       bag: Array.isArray(saved.bag) ? saved.bag.filter(id => PICKUPS[id]).slice(0, 8) : [],
       opts: saved.opts && typeof saved.opts === 'object' ? saved.opts : {},
+      previewSort: saved.previewSort === 'quality' ? 'quality' : 'name',
+      findTarget: Number.isInteger(saved.findTarget) && data.names[saved.findTarget] ? saved.findTarget : null,
     };
   } catch {
     return {};
@@ -320,20 +325,6 @@ function renderResult(outcome) {
 const PREVIEW_FROM = 6;
 const PREVIEW_PAGE = 10;
 
-// Rough rarity of each pickup, used to suggest the easiest way to finish a recipe.
-// 0 = common, 1 = uncommon, 2 = rare.
-const RARITY = [
-  0,
-  0, 0, 1, 1, 1, 1, 1, // hearts: red, soul, black, eternal, gold, bone, rotten
-  0, 1, 1, 2, // coins: penny, nickel, dime, lucky penny
-  0, 2, 1, // keys: key, golden key, charged key
-  0, 2, 2, // bombs: bomb, golden bomb, giga bomb
-  1, 1, 2, // batteries: micro, lil', mega
-  0, 0, 1, 2, // card, pill, rune, dice shard
-  1, 2, 2, 2, // cracked key, golden penny, golden pill, golden battery
-  0, // poop
-];
-
 /** All multisets of `size` pickup ids, as sorted arrays. */
 function pickupCombos(size, from = 1) {
   if (size === 0) return [[]];
@@ -347,7 +338,7 @@ function pickupCombos(size, from = 1) {
 let previewCache = { key: '', items: [] };
 let previewShowAll = false;
 
-/** Distinct items the bag can still become, alphabetical, each with its easiest completion. */
+/** Distinct items the bag can still become, each with its easiest completion. */
 function previewItems(seed) {
   const key = [state.version, seed, [...state.bag].sort((a, b) => a - b), JSON.stringify(state.opts)].join('|');
   if (previewCache.key === key) return previewCache.items;
@@ -356,7 +347,7 @@ function previewItems(seed) {
   const byItem = new Map();
   for (const add of pickupCombos(8 - state.bag.length)) {
     const id = craft(version, seed, [...state.bag, ...add], state.opts).candidates[0];
-    const cost = add.reduce((sum, p) => sum + RARITY[p], 0);
+    const cost = recipeCost(add);
     const entry = byItem.get(id);
     if (!entry) byItem.set(id, { id, add, cost, ways: 1 });
     else {
@@ -364,9 +355,17 @@ function previewItems(seed) {
       if (cost < entry.cost) Object.assign(entry, { add, cost });
     }
   }
-  const items = [...byItem.values()].sort((a, b) => itemName(a.id).localeCompare(itemName(b.id)));
+  const items = [...byItem.values()];
   previewCache = { key, items };
   return items;
+}
+
+/** Sorts preview entries by name, or best quality first (then by name). */
+function sortPreview(items, by) {
+  const version = data.versions[state.version];
+  const byName = (a, b) => itemName(a.id).localeCompare(itemName(b.id));
+  if (by !== 'quality') return [...items].sort(byName);
+  return [...items].sort((a, b) => version.items[b.id][1] - version.items[a.id][1] || byName(a, b));
 }
 
 function renderPreview(seed) {
@@ -392,7 +391,7 @@ function renderPreview(seed) {
   }
 
   const version = data.versions[state.version];
-  const items = previewItems(seed);
+  const items = sortPreview(previewItems(seed), state.previewSort);
   const query = search.value.trim().toLowerCase();
   const matches = query ? items.filter(e => itemName(e.id).toLowerCase().includes(query)) : items;
   const shown = previewShowAll || query ? matches : matches.slice(0, PREVIEW_PAGE);
@@ -446,9 +445,265 @@ function renderPreview(seed) {
 }
 
 $('preview-search').addEventListener('input', () => renderPreview(parseSeed(state.seedText)));
+for (const button of document.querySelectorAll('[data-sort]')) {
+  button.addEventListener('click', () => {
+    state.previewSort = button.dataset.sort;
+    render();
+  });
+}
 $('preview-more').addEventListener('click', () => {
   previewShowAll = true;
   renderPreview(parseSeed(state.seedText));
+});
+
+// ---------- item finder ----------
+// Pick an item and search every possible bag for the ones that make it on this seed.
+// The search covers ~30 million bags, so it runs in a worker and takes a few seconds.
+
+const FINDER_KEEP = 50;
+const FINDER_PAGE = 10;
+// Pools the bag can draw from (see itemWeights in crafting.js).
+const CRAFT_POOLS = [0, 1, 2, 3, 4, 5, 7, 8, 9, 12, 26];
+
+const craftableCache = {};
+/** Ids of every item the bag can make in this version. */
+function craftableItems(versionKey) {
+  if (!craftableCache[versionKey]) {
+    const version = data.versions[versionKey];
+    const ids = new Set(Object.values(version.fixed));
+    for (const pool of CRAFT_POOLS) for (const [id] of version.pools[pool]) ids.add(id);
+    craftableCache[versionKey] = [...ids].filter(id => data.names[id]).sort((a, b) => itemName(a).localeCompare(itemName(b)));
+  }
+  return craftableCache[versionKey];
+}
+
+let finderWorker = null;
+let finderJob = null; // { key, progress }
+let finderResult = { key: '', result: null };
+let finderShowAll = false;
+
+function startFinderSearch(key, seed) {
+  if (finderJob?.key === key) return;
+  finderWorker?.terminate();
+  const worker = new Worker(new URL('./finder-worker.js', import.meta.url), { type: 'module' });
+  finderWorker = worker;
+  finderJob = { key, progress: 0 };
+  const finish = result => {
+    if (finderWorker !== worker) return;
+    finderResult = { key, result };
+    stopFinderSearch();
+    renderFinder(parseSeed(state.seedText));
+  };
+  worker.onmessage = ({ data: message }) => {
+    if (finderWorker !== worker) return;
+    if (message.result) return finish(message.result);
+    finderJob.progress = message.progress;
+    renderFinder(parseSeed(state.seedText));
+  };
+  worker.onerror = () => finish({ error: true });
+  worker.postMessage({ version: state.version, seed, target: state.findTarget, opts: state.opts, keep: FINDER_KEEP });
+}
+
+function stopFinderSearch() {
+  finderWorker?.terminate();
+  finderWorker = null;
+  finderJob = null;
+}
+
+function selectFindTarget(id) {
+  state.findTarget = id;
+  finderShowAll = false;
+  $('finder-search').value = '';
+  render();
+}
+
+function renderFinderMatches() {
+  const list = $('finder-matches');
+  const raw = $('finder-search').value.trim();
+  const query = raw.toLowerCase();
+  if (!query) {
+    list.replaceChildren();
+    return;
+  }
+  const version = data.versions[state.version];
+  const ids = craftableItems(state.version).filter(id => itemName(id).toLowerCase().includes(query));
+  // Names that start with the query first.
+  ids.sort((a, b) => itemName(b).toLowerCase().startsWith(query) - itemName(a).toLowerCase().startsWith(query));
+  const rows = ids.slice(0, 8).map(id => {
+    const li = document.createElement('li');
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'preview-row';
+    const info = document.createElement('span');
+    info.className = 'preview-info';
+    const name = document.createElement('strong');
+    name.textContent = itemName(id);
+    info.append(name, stars(version.items[id][1]));
+    row.append(itemIcon(id, 40), info);
+    row.addEventListener('click', () => selectFindTarget(id));
+    li.append(row);
+    return li;
+  });
+  if (!rows.length) {
+    const li = document.createElement('li');
+    li.className = 'preview-empty';
+    li.textContent = `No craftable item matches "${raw}".`;
+    rows.push(li);
+  }
+  list.replaceChildren(...rows);
+}
+
+function recipeRow(recipe) {
+  const li = document.createElement('li');
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'preview-row recipe-row';
+  row.setAttribute('aria-label', `Put ${recipe.map(p => PICKUPS[p].name).join(', ')} in the bag`);
+  row.title = 'Put these in the bag';
+  const icons = document.createElement('span');
+  icons.className = 'recipe-icons';
+  const counts = new Map();
+  for (const p of recipe) counts.set(p, (counts.get(p) ?? 0) + 1);
+  for (const [p, n] of counts) {
+    const group = document.createElement('span');
+    group.className = 'recipe-pickup';
+    group.title = PICKUPS[p].name;
+    group.append(pickupIcon(p));
+    if (n > 1) group.append(`×${n}`);
+    icons.append(group);
+  }
+  const use = document.createElement('span');
+  use.className = 'recipe-use';
+  use.textContent = 'Use';
+  row.append(icons, use);
+  row.addEventListener('click', () => {
+    state.bag = [...recipe];
+    render();
+    document.querySelector('.bag-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  li.append(row);
+  return li;
+}
+
+function finderNote(text) {
+  const p = document.createElement('p');
+  p.className = 'hint';
+  p.textContent = text;
+  return p;
+}
+
+function finderHeading(text) {
+  const h = document.createElement('h3');
+  h.className = 'finder-subhead';
+  h.textContent = text;
+  return h;
+}
+
+function recipeList(recipes) {
+  const list = document.createElement('ol');
+  list.className = 'preview-list';
+  list.append(...recipes.map(recipeRow));
+  return list;
+}
+
+function renderFinder(seed) {
+  const target = state.findTarget;
+  const results = $('finder-results');
+  $('finder-pick').hidden = target !== null;
+  $('finder-target').hidden = target === null;
+  if (target === null) {
+    stopFinderSearch();
+    results.replaceChildren(finderNote('See every bag that makes an item on your seed, easiest pickups first.'));
+    renderFinderMatches();
+    return;
+  }
+
+  const version = data.versions[state.version];
+  const head = document.createElement('div');
+  head.className = 'finder-head';
+  const info = document.createElement('div');
+  info.className = 'preview-info';
+  const name = document.createElement('strong');
+  name.textContent = itemName(target);
+  info.append(name, stars(version.items[target][1]));
+  const change = document.createElement('button');
+  change.type = 'button';
+  change.className = 'btn-ghost';
+  change.textContent = 'Change';
+  change.addEventListener('click', () => {
+    state.findTarget = null;
+    render();
+    $('finder-search').focus();
+  });
+  head.append(itemIcon(target, 40), info, change);
+  $('finder-target').replaceChildren(head);
+
+  if (!craftableItems(state.version).includes(target)) {
+    stopFinderSearch();
+    results.replaceChildren(finderNote(`${itemName(target)} can't come out of the bag in ${version.label}.`));
+    return;
+  }
+  if (seed === null) {
+    stopFinderSearch();
+    results.replaceChildren(finderNote('Enter a valid seed to search for recipes.'));
+    return;
+  }
+
+  const key = [state.version, seed, target, JSON.stringify(state.opts)].join('|');
+  if (finderResult.key !== key) {
+    startFinderSearch(key, seed);
+    const pct = Math.min(100, Math.round((finderJob.progress / TOTAL_BAGS) * 100));
+    const status = document.createElement('div');
+    status.className = 'finder-progress';
+    const bar = document.createElement('progress');
+    bar.max = 100;
+    bar.value = pct;
+    status.append(finderNote(`Checking all ${TOTAL_BAGS.toLocaleString()} possible bags… ${pct}%`), bar);
+    results.replaceChildren(status);
+    return;
+  }
+
+  const result = finderResult.result;
+  if (result.error) {
+    results.replaceChildren(finderNote('Something went wrong while searching. Try reloading the page.'));
+    return;
+  }
+  const children = [];
+  if (result.fixed.length) {
+    children.push(finderHeading('Fixed recipe, works on any seed'), recipeList(result.fixed));
+  }
+  if (!result.total) {
+    children.push(finderHeading('No recipes on this seed'), finderNote(Object.values(state.opts).some(Boolean)
+      ? 'No bag makes this item on this seed with your run modifiers on. Try turning some off.'
+      : 'No bag makes this item on this seed.'));
+    results.replaceChildren(...children);
+    return;
+  }
+
+  children.push(
+    finderHeading(`${result.total.toLocaleString()} recipe${result.total === 1 ? '' : 's'} on this seed`),
+    finderNote((result.total > result.recipes.length ? `The ${result.recipes.length} easiest to collect. ` : 'Easiest to collect first. ')
+      + 'Tap one to fill the bag. Assumes everything is unlocked.'),
+  );
+  const shown = finderShowAll ? result.recipes : result.recipes.slice(0, FINDER_PAGE);
+  children.push(recipeList(shown));
+  if (shown.length < result.recipes.length) {
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'btn-ghost preview-more';
+    more.textContent = `Show ${result.recipes.length - shown.length} more`;
+    more.addEventListener('click', () => {
+      finderShowAll = true;
+      renderFinder(parseSeed(state.seedText));
+    });
+    children.push(more);
+  }
+  results.replaceChildren(...children);
+}
+
+$('finder-search').addEventListener('input', renderFinderMatches);
+$('finder-search').addEventListener('keydown', event => {
+  if (event.key === 'Enter') $('finder-matches').querySelector('button')?.click();
 });
 
 // ---------- bottom dock ----------
@@ -514,6 +769,9 @@ function render() {
   for (const button of document.querySelectorAll('[data-version]')) {
     button.setAttribute('aria-checked', String(button.dataset.version === state.version));
   }
+  for (const button of document.querySelectorAll('[data-sort]')) {
+    button.setAttribute('aria-checked', String(button.dataset.sort === state.previewSort));
+  }
 
   const activeModifiers = MODIFIERS.filter(([key]) => state.opts[key]).length;
   const count = $('modifier-count');
@@ -524,6 +782,7 @@ function render() {
   const outcome = computeOutcome(seed);
   renderResult(outcome);
   renderPreview(seed);
+  renderFinder(seed);
   renderDock(outcome);
   saveState();
 }

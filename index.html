@@ -13,7 +13,7 @@
   <main class="app">
     <header class="masthead">
       <h1>Tainted Cain Crafting Calculator</h1>
-      <p>Enter your run seed and 8 pickups to see the exact item the Bag of Crafting will make.</p>
+      <p>Enter your run seed and 8 pickups to see the exact item the Bag of Crafting will make, or pick an item to see how to craft it.</p>
     </header>
 
     <section class="card setup" aria-label="Run settings">
@@ -53,8 +53,14 @@
           <span id="preview-count" class="muted small"></span>
         </div>
         <p id="preview-note" class="hint"></p>
-        <input id="preview-search" class="preview-search" type="search" placeholder="Search items" autocomplete="off"
-               aria-label="Search possible items">
+        <div class="preview-tools">
+          <input id="preview-search" class="preview-search" type="search" placeholder="Search items" autocomplete="off"
+                 aria-label="Search possible items">
+          <div class="segmented segmented-small" role="radiogroup" aria-label="Sort items">
+            <button type="button" role="radio" data-sort="name">A–Z</button>
+            <button type="button" role="radio" data-sort="quality">Quality</button>
+          </div>
+        </div>
         <ol id="preview-list" class="preview-list"></ol>
         <button type="button" id="preview-more" class="btn-ghost preview-more" hidden></button>
       </div>
@@ -66,6 +72,19 @@
         <span class="muted small">Tap to add &middot; badge = value</span>
       </div>
       <div id="picker"></div>
+    </section>
+
+    <section class="card finder" aria-labelledby="finder-title">
+      <div class="card-head">
+        <h2 id="finder-title">Find recipes for an item</h2>
+      </div>
+      <div id="finder-pick">
+        <input id="finder-search" class="preview-search" type="search" placeholder="Search for an item, e.g. Sacred Heart"
+               autocomplete="off" aria-label="Search for an item to craft" aria-controls="finder-matches">
+        <ol id="finder-matches" class="preview-list"></ol>
+      </div>
+      <div id="finder-target" hidden></div>
+      <div id="finder-results"></div>
     </section>
 
     <details class="card modifiers" id="modifiers">
