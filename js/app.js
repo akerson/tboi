@@ -1,6 +1,6 @@
-import data from './data.js?v=3';
-import { PICKUPS, craft, parseSeed, normalizeSeed, bagScore } from './crafting.js?v=3';
-import { recipeCost, rankRecipes, packRecipes, RARITY, TOTAL_BAGS } from './finder.js?v=3';
+import data from './data.js?v=4';
+import { PICKUPS, craft, parseSeed, normalizeSeed, bagScore } from './crafting.js?v=4';
+import { recipeCost, rankRecipes, packRecipes, TOTAL_BAGS } from './finder.js?v=4';
 
 const PICKUP_GROUPS = [
   ['Hearts', [1, 2, 3, 4, 5, 6, 7]],
@@ -22,6 +22,10 @@ const MODIFIERS = [
   ['sacredOrb', 'Holding Sacred Orb', 'No quality 0 or 1 items, and a third of quality 2 items are skipped.'],
   ['goldenNo', 'Golden or stacked NO! trinket', 'No quality 0 items.'],
 ];
+
+// Turned off by "Rare ones off" in settings: cracked key, giga bomb, micro, mega and golden
+// batteries, golden pill, dice shard, poop.
+const RARE_PICKUPS = [25, 17, 18, 20, 28, 27, 24, 29];
 
 const STORAGE_KEY = 'tcain-calculator';
 const $ = id => document.getElementById(id);
@@ -239,7 +243,7 @@ $('exclude-none').addEventListener('click', () => {
   render();
 });
 $('exclude-rare').addEventListener('click', () => {
-  state.excluded = PICKUPS.flatMap((p, id) => p && RARITY[id] === 2 ? [id] : []);
+  state.excluded = [...RARE_PICKUPS];
   render();
 });
 
@@ -549,7 +553,7 @@ let finderShowAll = false;
 function startFinderSearch(key, seed) {
   if (finderJob?.key === key) return;
   finderWorker?.terminate();
-  const worker = new Worker(new URL('./finder-worker.js?v=3', import.meta.url), { type: 'module' });
+  const worker = new Worker(new URL('./finder-worker.js?v=4', import.meta.url), { type: 'module' });
   finderWorker = worker;
   finderJob = { key, progress: 0 };
   const finish = result => {

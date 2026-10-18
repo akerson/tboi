@@ -10,7 +10,7 @@
 // A draw is resolved with a binary search over the table; draws that land too close to a
 // boundary for float rounding to be ignored fall back to the exact scan in drawItem().
 
-import { PICKUPS, PICKUP_COUNT, rngNext, qualityRange, poolFilterOk, itemWeights, drawItem, drawPoint, rollFilterOk } from './crafting.js?v=2';
+import { PICKUPS, PICKUP_COUNT, rngNext, qualityRange, poolFilterOk, itemWeights, drawItem, drawPoint, rollFilterOk } from './crafting.js?v=4';
 
 export const TOTAL_BAGS = 30260340;
 
