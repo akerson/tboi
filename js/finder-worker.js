@@ -1,6 +1,6 @@
 // Runs findRecipes() off the main thread; the full search takes a few seconds.
-import data from './data.js?v=4';
-import { findRecipes } from './finder.js?v=4';
+import data from './data.js?v=5';
+import { findRecipes } from './finder.js?v=5';
 
 self.onmessage = ({ data: { version, seed, target, opts } }) => {
   const result = findRecipes(data.versions[version], seed, target, opts, {
