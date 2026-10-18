@@ -54,13 +54,13 @@ const SCORE_KEYS = RANGE_KEYS.length ** 2;
  * @param {number} target   collectible id
  * @param {object} [opts]   run options, as for craft()
  * @param {object} [settings]
- * @param {number} [settings.keep]         how many of the easiest recipes to return
  * @param {(done: number) => void} [settings.onProgress]  called with the number of bags checked so far
- * @returns {{ fixed: number[][], recipes: number[][], total: number }}
- *   fixed: seed independent recipes for the item. recipes: the easiest seeded recipes,
- *   as sorted pickup id arrays. total: how many seeded recipes exist in all.
+ * @returns {{ fixed: number[][], packed: Uint8Array, total: number }}
+ *   fixed: seed independent recipes for the item, as sorted pickup id arrays.
+ *   packed: every seeded recipe, 8 sorted pickup ids each, back to back (rank them with
+ *   rankRecipes()). total: how many seeded recipes there are.
  */
-export function findRecipes(version, seed, target, opts = {}, { keep = 50, onProgress } = {}) {
+export function findRecipes(version, seed, target, opts = {}, { onProgress } = {}) {
   const fixedBags = new Set(Object.keys(version.fixed));
   const fixed = Object.entries(version.fixed)
     .filter(([, id]) => id === target)
@@ -157,7 +157,8 @@ export function findRecipes(version, seed, target, opts = {}, { keep = 50, onPro
     return selected === target;
   }
 
-  let recipes = [];
+  // The most common items have around a million recipes, so pack them as bytes.
+  let packed = new Uint8Array(8 * 4096);
   let total = 0;
   let checked = 0, reported = 0;
   const bag = new Array(8);
@@ -166,16 +167,13 @@ export function findRecipes(version, seed, target, opts = {}, { keep = 50, onPro
   function found() {
     const recipe = bag.slice();
     if (fixedBags.has(recipe.join(','))) return; // a fixed recipe overrides the seed
+    if ((total + 1) * 8 > packed.length) {
+      const grown = new Uint8Array(packed.length * 2);
+      grown.set(packed);
+      packed = grown;
+    }
+    packed.set(recipe, total * 8);
     total++;
-    recipes.push(recipe);
-    if (recipes.length > keep * 4) trim();
-  }
-  function trim() {
-    recipes = recipes
-      .map(r => [recipeCost(r), r])
-      .sort((x, y) => x[0] - y[0])
-      .slice(0, keep)
-      .map(x => x[1]);
   }
 
   function visit(depth, from, rng, score, specials, blocked) {
@@ -205,6 +203,92 @@ export function findRecipes(version, seed, target, opts = {}, { keep = 50, onPro
   }
   visit(0, 1, seed, 0, 0, 0);
   onProgress?.(checked);
-  trim();
-  return { fixed, recipes, total };
+  return { fixed, packed: packed.slice(0, total * 8), total };
+}
+
+/** Packs recipes (arrays of 8 pickup ids) the way findRecipes() does. */
+export function packRecipes(recipes) {
+  const packed = new Uint8Array(recipes.length * 8);
+  recipes.forEach((recipe, i) => packed.set([...recipe].sort((a, b) => a - b), i * 8));
+  return packed;
+}
+
+/**
+ * Ranks packed recipes against the pickups already in the bag: fewest pickups to add
+ * first, then the easiest ones to collect. Recipes that need an excluded pickup are left
+ * out, unless the bag already holds enough of it.
+ *
+ * @param {Uint8Array} packed  recipes from findRecipes() or packRecipes()
+ * @param {number[]} bag       pickup ids in the bag now (0 to 8)
+ * @param {Iterable<number>} [excluded]  pickup ids not to suggest
+ * @param {number} [keep]      how many recipes to return
+ * @returns {{ recipes: { recipe: number[], add: number[], drop: number[] }[], eligible: number, closest: number, bestAdd: number }}
+ *   recipes: the best ones, with the pickups to add to (and drop from) the bag.
+ *   eligible: recipes left after exclusions. closest: how many need only bestAdd pickups.
+ */
+export function rankRecipes(packed, bag, excluded = [], keep = 50) {
+  const have = new Array(PICKUP_COUNT).fill(0);
+  for (const p of bag) have[p]++;
+  const banned = new Array(PICKUP_COUNT).fill(false);
+  for (const p of excluded) banned[p] = true;
+
+  // cost = pickups to add * 1024 + rarity cost of those pickups (always under 1024).
+  const n = packed.length / 8;
+  const costs = new Int32Array(n);
+  const buckets = new Uint32Array(9 * 1024);
+  const need = new Array(PICKUP_COUNT).fill(0);
+  let eligible = 0;
+  for (let i = 0; i < n; i++) {
+    let add = 0, rarity = 0, distinct = 0, ok = true;
+    for (let j = i * 8; j < i * 8 + 8; j++) {
+      const p = packed[j];
+      if (++need[p] > have[p]) {
+        if (banned[p]) ok = false;
+        add++;
+        rarity += RARITY[p];
+        if (need[p] - have[p] === 1) distinct++;
+      }
+    }
+    for (let j = i * 8; j < i * 8 + 8; j++) need[packed[j]] = 0;
+    if (!ok) {
+      costs[i] = -1;
+      continue;
+    }
+    costs[i] = add * 1024 + rarity * 16 + distinct;
+    buckets[costs[i]]++;
+    eligible++;
+  }
+
+  // Take the cheapest `keep` without sorting everything.
+  let limit = 0, taken = 0;
+  while (limit < buckets.length && taken < keep) taken += buckets[limit++];
+  const best = [];
+  for (let i = 0; i < n; i++) if (costs[i] >= 0 && costs[i] < limit) best.push(i);
+  best.sort((a, b) => costs[a] - costs[b] || a - b);
+  best.length = Math.min(best.length, keep);
+
+  let bestAdd = 0, closest = 0;
+  if (best.length) {
+    bestAdd = costs[best[0]] >> 10;
+    for (let c = bestAdd * 1024; c < (bestAdd + 1) * 1024; c++) closest += buckets[c];
+  }
+
+  const recipes = best.map(i => {
+    const recipe = Array.from(packed.subarray(i * 8, i * 8 + 8));
+    const left = have.slice();
+    const add = [];
+    for (const p of recipe) {
+      if (left[p] > 0) left[p]--;
+      else add.push(p);
+    }
+    const drop = [];
+    for (const p of bag) {
+      if (left[p] > 0) {
+        left[p]--;
+        drop.push(p);
+      }
+    }
+    return { recipe, add, drop };
+  });
+  return { recipes, eligible, closest, bestAdd };
 }

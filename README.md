@@ -21,11 +21,15 @@ Quick way to check which one your game is: craft 8 bombs. **Mr. Boom** means Rep
 - With 6 or 7 pickups in, previews every item the remaining slots could make, sorted alphabetically or by
   quality, with the easiest pickups to finish each one. Searchable, and tap one to fill the bag.
 - Find recipes for an item: pick any craftable item and it checks all 30 million possible bags on your seed,
-  listing fixed recipes plus the easiest seeded ones (common pickups first). Tap one to fill the bag.
+  listing fixed recipes plus the easiest seeded ones (common pickups first). With pickups already in the bag,
+  it shows the ways to finish it, or if there are none, the closest recipes and which pickups to swap.
+  Tap one to fill the bag.
+- Settings: turn off pickups you rarely find so suggestions leave them out, and a compact picker that hides
+  pickup names so it fits on a phone screen.
 - If the item needs an unlock you don't have yet, shows what the bag gives instead.
 - Run modifiers that change the result: Greed mode, daily runs, challenges, Womb and later, Sacred Orb,
   golden NO!, and co-op characters (Keeper, The Lost with Birthright, Tainted Lost).
-- Remembers your seed, version and bag on your device.
+- Remembers your seed, version, bag and settings on your device.
 - No build step, no tracking.
 
 ## How it works

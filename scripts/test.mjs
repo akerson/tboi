@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import data from '../js/data.js';
 import { craft, parseSeed, normalizeSeed, PICKUPS, RNG_SHIFTS } from '../js/crafting.js';
-import { findRecipes } from '../js/finder.js';
+import { findRecipes, rankRecipes } from '../js/finder.js';
 
 const CASES = Number(process.argv[2] ?? 20000);
 const read = path => readFileSync(new URL('../reference/' + path, import.meta.url), 'utf8');
@@ -82,8 +82,9 @@ for (const [key, opts] of FINDER_CASES) {
   const seed = (rand() * 2 ** 32) >>> 0 || 1;
   const bag = Array.from({ length: 8 }, () => 1 + Math.floor(rand() * 29)).sort((a, b) => a - b);
   const target = craft(version, seed, bag, opts).candidates[0];
-  const { recipes, fixed, total } = findRecipes(version, seed, target, opts, { keep: Infinity });
-  assert.equal(recipes.length, total);
+  const { packed, fixed, total } = findRecipes(version, seed, target, opts);
+  assert.equal(packed.length, total * 8);
+  const recipes = Array.from({ length: total }, (_, i) => Array.from(packed.subarray(i * 8, i * 8 + 8)));
   const listed = new Set([...recipes, ...fixed].map(r => r.join()));
   assert.ok(listed.has(bag.join()), `${key} finder missed seed=${seed} bag=[${bag}]`);
   // Random bags that make the target must be listed too.
@@ -96,6 +97,17 @@ for (const [key, opts] of FINDER_CASES) {
   for (let i = 0; i < recipes.length; i += Math.ceil(recipes.length / 2000)) {
     assert.equal(craft(version, seed, recipes[i], opts).candidates[0], target, `${key} finder gave a wrong recipe [${recipes[i]}]`);
   }
+  // Ranking against a partial bag: the bag's own pickups come first, exclusions are honored.
+  const partial = bag.slice(0, 5);
+  const ranked = rankRecipes(packed, partial, [], 20);
+  assert.equal(ranked.bestAdd, 3, 'a bag that makes the target can be finished from its first 5 pickups');
+  for (const { recipe, add, drop } of ranked.recipes.slice(0, ranked.closest)) {
+    assert.equal(drop.length, 0);
+    assert.deepEqual([...partial, ...add].sort((a, b) => a - b), recipe);
+  }
+  const banned = [...new Set(bag.slice(5))].filter(p => !partial.includes(p));
+  const filtered = rankRecipes(packed, partial, banned, 20);
+  for (const { add } of filtered.recipes) assert.ok(add.every(p => !banned.includes(p)), 'excluded pickup suggested');
   console.log(`${key} finder: ${total} recipes for item ${target} on seed ${seed}, all checked ones correct`);
 }
 

@@ -49,6 +49,20 @@ button {
   letter-spacing: -0.01em;
 }
 .masthead p { margin: 0; color: var(--muted); }
+.masthead-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.masthead-row h1 { flex: 1; }
+.btn-icon {
+  flex: none;
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+}
 
 .card {
   background: var(--card);
@@ -286,18 +300,13 @@ h2 { font-size: 1.05rem; }
 
 /* ---------- preview ---------- */
 
-.preview {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-}
 .preview[hidden] { display: none; }
 .preview-head {
   display: flex;
   align-items: baseline;
   gap: 10px;
 }
-.preview-head h3 { margin: 0; flex: 1; font-size: 1rem; }
+.preview-head h2 { margin: 0; flex: 1; }
 .preview .hint { margin: 2px 0 10px; }
 .preview-tools {
   display: flex;
@@ -417,6 +426,13 @@ h2 { font-size: 1.05rem; }
   font-size: 0.85rem;
   font-weight: 600;
 }
+.recipe-sign {
+  font-weight: 700;
+  color: var(--good);
+  margin-right: -6px;
+}
+.recipe-sign.drop { color: var(--accent); margin-left: 4px; }
+.recipe-pickup.drop .pickup-icon { opacity: 0.55; }
 .recipe-use {
   flex: none;
   font-size: 0.8rem;
@@ -476,6 +492,45 @@ h2 { font-size: 1.05rem; }
   text-align: center;
   color: var(--muted);
 }
+
+/* Compact: one grid of icons, no group titles or names. */
+#picker.compact { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; }
+#picker.compact .group,
+#picker.compact .group-items { display: contents; }
+#picker.compact .group-title,
+#picker.compact .pick-name { display: none; }
+#picker.compact .pick {
+  justify-content: center;
+  padding: 6px;
+}
+
+/* ---------- settings ---------- */
+
+.settings {
+  width: min(560px, calc(100vw - 2 * var(--gutter)));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--text);
+}
+.settings::backdrop { background: rgba(0, 0, 0, 0.6); }
+.settings .modifier { padding: 8px 0; }
+.settings-subhead { margin: 14px 0 0; font-size: 0.95rem; }
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+}
+.exclude-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
+}
+.exclude.off { opacity: 0.4; }
+.exclude.off .pick-name { text-decoration: line-through; }
 
 /* ---------- modifiers ---------- */
 
@@ -589,6 +644,7 @@ body.has-dock .app { padding-bottom: 96px; }
   .masthead, .footer { grid-column: 1 / -1; }
   .setup { grid-column: 1; }
   .bag-card { grid-column: 1; }
+  .preview { grid-column: 1; }
   .picker-card { grid-column: 2; grid-row: 2 / span 3; }
   .modifiers { grid-column: 1; }
   .finder { grid-column: 1; }
