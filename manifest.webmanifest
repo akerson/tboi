@@ -1,0 +1,15 @@
+{
+  "name": "Tainted Cain Crafting Calculator",
+  "short_name": "T. Cain Crafting",
+  "description": "Bag of Crafting calculator for Tainted Cain in The Binding of Isaac: Repentance and Repentance+.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#16110e",
+  "theme_color": "#16110e",
+  "icons": [
+    { "src": "assets/icons/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
