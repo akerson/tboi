@@ -30,7 +30,7 @@ Quick way to check which one your game is: craft 8 bombs. **Mr. Boom** means Rep
 - Run modifiers that change the result: Greed mode, daily runs, challenges, Womb and later, Sacred Orb,
   golden NO!, and co-op characters (Keeper, The Lost with Birthright, Tainted Lost).
 - Remembers your seed, version, bag and settings on your device.
-- No build step, no tracking.
+- No build step. Cookieless page view stats via [Umami](https://umami.is).
 
 ## How it works
 
